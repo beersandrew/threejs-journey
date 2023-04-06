@@ -3,8 +3,8 @@ import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js'
 
 // Sizes
 const sizes = {
-    width: 800,
-    height: 600
+    width: window.innerWidth,
+    height: window.innerHeight
 }
 
 const cursor = {
