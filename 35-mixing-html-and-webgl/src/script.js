@@ -6,28 +6,37 @@ import { gsap } from 'gsap'
 /**
  * Loaders
  */
-const loadingBarElement = document.querySelector('.loading-bar');
-const loadingManager = new THREE.LoadingManager(() => {
-    console.log('loaded')
-    window.setTimeout(() => {
-        gsap.to(overlayMaterial.uniforms.uAlpha, {value: 0, duration: 3})
-        loadingBarElement.classList.add('ended')
-        loadingBarElement.style.transform = ''
-    }, 500)
-    
+let sceneReady = false;
+const loadingBarElement = document.querySelector('.loading-bar')
+const loadingManager = new THREE.LoadingManager(
+    // Loaded
+    () =>
+    {
+        // Wait a little
+        window.setTimeout(() =>
+        {
+            // Animate overlay
+            gsap.to(overlayMaterial.uniforms.uAlpha, { duration: 3, value: 0, delay: 1 })
 
-},
-(itemUrl, itemLoaded, itemsTotal) => {
-    console.log('progress')
+            // Update loadingBarElement
+            loadingBarElement.classList.add('ended')
+            loadingBarElement.style.transform = ''
+            
+        }, 500)
 
-    const progressRatio = itemLoaded / itemsTotal;
-    console.log(progressRatio)
-    loadingBarElement.style.transform = `scaleX(${progressRatio})`
+        window.setTimeout(() =>{
+            sceneReady = true;
+        }, 3000)
+    },
 
-},
-() => {
-    console.log('error')
-})
+    // Progress
+    (itemUrl, itemsLoaded, itemsTotal) =>
+    {
+        // Calculate the progress and update the loadingBarElement
+        const progressRatio = itemsLoaded / itemsTotal
+        loadingBarElement.style.transform = `scaleX(${progressRatio})`
+    }
+)
 const gltfLoader = new GLTFLoader(loadingManager)
 const cubeTextureLoader = new THREE.CubeTextureLoader(loadingManager)
 
@@ -43,28 +52,34 @@ const canvas = document.querySelector('canvas.webgl')
 // Scene
 const scene = new THREE.Scene()
 
-// Overlay
-const overlayGeometry = new THREE.PlaneGeometry(2, 2, 1, 1);
-const overlayMaterial = new THREE.ShaderMaterial(
+/**
+ * Overlay
+ */
+const overlayGeometry = new THREE.PlaneGeometry(2, 2, 1, 1)
+const overlayMaterial = new THREE.ShaderMaterial({
+    // wireframe: true,
+    transparent: true,
+    uniforms:
     {
-        uniforms: {
-            uAlpha: {value: 1.0}
-        },
-        vertexShader: `
-            void main(){
-                gl_Position = vec4(position, 1.0);
-            }
-        `,
-        fragmentShader:`
-            uniform float uAlpha;
-            void main(){
-                gl_FragColor = vec4(0.0, 0.0, 0.0, uAlpha);
-            }
-        `,
-        transparent: true
-    })
-const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial);
-scene.add(overlay);
+        uAlpha: { value: 1 }
+    },
+    vertexShader: `
+        void main()
+        {
+            gl_Position = vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform float uAlpha;
+
+        void main()
+        {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, uAlpha);
+        }
+    `
+})
+const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial)
+scene.add(overlay)
 
 /**
  * Update all materials
@@ -107,11 +122,10 @@ debugObject.envMapIntensity = 2.5
  * Models
  */
 gltfLoader.load(
-    '/models/FlightHelmet/glTF/FlightHelmet.gltf',
+    '/models/DamagedHelmet/glTF/DamagedHelmet.gltf',
     (gltf) =>
     {
-        gltf.scene.scale.set(10, 10, 10)
-        gltf.scene.position.set(0, - 4, 0)
+        gltf.scene.scale.set(2.5, 2.5, 2.5)
         gltf.scene.rotation.y = Math.PI * 0.5
         scene.add(gltf.scene)
 
@@ -119,6 +133,14 @@ gltfLoader.load(
     }
 )
 
+// points of interest
+
+const points = [
+    {
+        position: new THREE.Vector3(1.55, 0.3, -0.6),
+        element: document.querySelector('.point-0')
+    }
+];
 
 /**
  * Lights
@@ -182,6 +204,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap
 renderer.setSize(sizes.width, sizes.height)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
+
+const raycaster = new THREE.Raycaster();
 /**
  * Animate
  */
@@ -189,7 +213,44 @@ const tick = () =>
 {
     // Update controls
     controls.update()
+
+
+
+    // points update
+    if (sceneReady){
+        for(const point of points){
+            const screenPosition = point.position.clone();
+            screenPosition.project(camera);
     
+            raycaster.setFromCamera(screenPosition, camera);
+    
+            const intersects = raycaster.intersectObjects(scene.children, true);
+    
+            if (intersects.length == 0){
+                point.element.classList.add('visible');
+            }
+            else{
+                const intersectionDistance = intersects[0].distance;
+                const pointDistance = point.position.distanceTo(camera.position);
+    
+                if (intersectionDistance < pointDistance){
+    
+                    point.element.classList.remove('visible');
+                }
+                else{
+                    point.element.classList.add('visible');
+                }
+            }
+    
+            const translateX = screenPosition.x * sizes.width * 0.5;
+            const translateY = screenPosition.y * sizes.height * -0.5;
+    
+            point.element.style.transform = `translateX(${translateX}px) translateY(${translateY}px)`
+        }
+    }
+
+    
+
     // Render
     renderer.render(scene, camera)
 
